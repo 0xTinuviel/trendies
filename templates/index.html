@@ -61,6 +61,9 @@
                     <p>USD Trend: <span class="{{ 'uptrend' if item.usdt.is_uptrend else 'downtrend' }}">
                         {{ item.usdt.trend_text }}
                     </span></p>
+                    {% if not item.usdt.get('error') %}
+                        <p><small>Last updated: {{ item.usdt.timestamp }}</small></p>
+                    {% endif %}
                 {% endif %}
             </div>
             
