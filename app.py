@@ -73,6 +73,19 @@ def get_exchange_for_asset(base_symbol):
     else:
         return ccxt.coinbase()
 
+def calculate_performance(closes, days):
+    """Calculate percentage performance over X days"""
+    try:
+        if len(closes) >= days:
+            current_price = closes[-1]
+            past_price = closes[-days]
+            if past_price != 0:  # Prevent division by zero
+                perf = ((current_price - past_price) / past_price) * 100
+                return perf
+    except Exception:
+        pass
+    return None
+
 def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
     cache_key = f"{base_symbol}_{quote_symbol}"
     
@@ -156,6 +169,10 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
             ema20 = calculate_ema(closes, 20)
             current_price = closes[-1]
             
+            # Calculate performance with safety checks
+            perf_7d = calculate_performance(closes, 7)
+            perf_14d = calculate_performance(closes, 14)
+            
             return {
                 "symbol": symbol_pair,
                 "current_price": current_price,
@@ -167,7 +184,9 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
                 "chain": chain,
                 "exchange": exchange.id,
                 "is_calculated": quote_symbol == "BTC",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "perf_7d": perf_7d if perf_7d is not None else None,
+                "perf_14d": perf_14d if perf_14d is not None else None
             }
         except Exception as e:
             return {
