@@ -25,20 +25,21 @@ def get_cached_data(key, fetch_func):
     return cache[key]
 
 def get_btc_price():
-    """Get current BTC/USDT price to use for conversions"""
+    """Get current BTC/USD price to use for conversions"""
     def fetch():
-        exchange = ccxt.binance()
-        btc_ohlcv = exchange.fetch_ohlcv('BTC/USDT', '1d', limit=50)
+        exchange = ccxt.coinbase()
+        btc_ohlcv = exchange.fetch_ohlcv('BTC/USD', '1d', limit=50)
         return [x[4] for x in btc_ohlcv]
     
     return get_cached_data('btc_price', fetch)
 
 def get_exchange_for_asset(base_symbol):
     """Choose appropriate exchange based on the asset"""
-    if base_symbol == "TIG":
+    if base_symbol in ["BTC", "ETH", "SOL"]:
+        return ccxt.coinbase()
+    elif base_symbol == "TIG":
         return ccxt.xt()
     elif base_symbol == "NATIX":
-        # Try KuCoin first, with fallbacks to Gate.io and MEXC
         exchanges_to_try = ['kucoin', 'gate', 'mexc']
         for exchange_id in exchanges_to_try:
             try:
@@ -49,7 +50,6 @@ def get_exchange_for_asset(base_symbol):
                 continue
         raise Exception("Could not connect to any exchange for NATIX")
     elif base_symbol == "FAI":
-        # Try BitMart first, fallback to BingX
         exchanges_to_try = ['bitmart', 'bingx']
         for exchange_id in exchanges_to_try:
             try:
@@ -60,9 +60,9 @@ def get_exchange_for_asset(base_symbol):
                 continue
         raise Exception("Could not connect to any exchange for FAI")
     else:
-        return ccxt.binance()
+        return ccxt.coinbase()
 
-def get_trend_analysis(base_symbol, quote_symbol="USDT", chain=None):
+def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
     cache_key = f"{base_symbol}_{quote_symbol}"
     
     def fetch_analysis():
@@ -76,7 +76,13 @@ def get_trend_analysis(base_symbol, quote_symbol="USDT", chain=None):
             }
         
         try:
-            symbol_pair = f"{base_symbol}/{quote_symbol}"
+            # Handle different quote currencies based on exchange
+            if exchange.id == 'coinbase':
+                actual_quote = "USD"
+            else:
+                actual_quote = "USDT"
+                
+            symbol_pair = f"{base_symbol}/{actual_quote}"
             
             # Special handling for specific tokens
             if base_symbol == "TIG":
@@ -92,29 +98,24 @@ def get_trend_analysis(base_symbol, quote_symbol="USDT", chain=None):
                 elif exchange.id == 'bingx':
                     symbol_pair = "FAI/USDT"
             
-            # For BTC relative value, we need to calculate it
             if quote_symbol == "BTC" and base_symbol in ["NATIX", "TIG", "FAI"]:
-                # Get USDT prices for the token
                 usdt_ohlcv = exchange.fetch_ohlcv(symbol_pair, '1d', limit=50)
                 if not usdt_ohlcv:
                     return {
                         "symbol": symbol_pair,
-                        "error": "No USDT data available",
+                        "error": "No price data available",
                         "chain": chain,
                         "exchange": exchange.id
                     }
                 
-                # Get BTC prices for the same period
                 btc_prices = get_btc_price()
                 
-                # Calculate relative values
                 closes = []
                 for i in range(min(len(usdt_ohlcv), len(btc_prices))):
-                    token_usdt_price = usdt_ohlcv[i][4]
-                    btc_usdt_price = btc_prices[i]
-                    closes.append(token_usdt_price / btc_usdt_price)
+                    token_price = usdt_ohlcv[i][4]
+                    btc_usd_price = btc_prices[i]
+                    closes.append(token_price / btc_usd_price)
             else:
-                # Normal OHLCV fetch for other cases
                 ohlcv = exchange.fetch_ohlcv(symbol_pair, '1d', limit=50)
                 if not ohlcv:
                     return {
@@ -136,7 +137,7 @@ def get_trend_analysis(base_symbol, quote_symbol="USDT", chain=None):
                 "ema20": ema20,
                 "is_uptrend": ema8 > ema20,
                 "trend_text": "Uptrend" if ema8 > ema20 else "Downtrend",
-                "quote_currency": quote_symbol,
+                "quote_currency": actual_quote,
                 "chain": chain,
                 "exchange": exchange.id,
                 "is_calculated": quote_symbol == "BTC" and base_symbol in ["NATIX", "TIG", "FAI"],
@@ -154,7 +155,6 @@ def get_trend_analysis(base_symbol, quote_symbol="USDT", chain=None):
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    # Define assets with their chains
     assets = [
         {"symbol": "BTC", "chain": None},
         {"symbol": "ETH", "chain": None},
@@ -168,20 +168,20 @@ async def root(request: Request):
     analysis = []
     for asset in assets:
         if asset["symbol"] == "BTC":
-            usdt_analysis = get_trend_analysis(asset["symbol"], "USDT", asset["chain"])
+            usd_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
             analysis.append({
                 "asset": asset["symbol"],
                 "chain": asset["chain"],
-                "usdt": usdt_analysis,
+                "usdt": usd_analysis,  # Keep the key as 'usdt' for template compatibility
                 "btc": {"symbol": "BTC/BTC", "error": "Same asset"}
             })
         else:
-            usdt_analysis = get_trend_analysis(asset["symbol"], "USDT", asset["chain"])
+            usd_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
             btc_analysis = get_trend_analysis(asset["symbol"], "BTC", asset["chain"])
             analysis.append({
                 "asset": asset["symbol"],
                 "chain": asset["chain"],
-                "usdt": usdt_analysis,
+                "usdt": usd_analysis,  # Keep the key as 'usdt' for template compatibility
                 "btc": btc_analysis
             })
     
