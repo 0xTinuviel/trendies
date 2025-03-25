@@ -37,6 +37,17 @@ def get_exchange_for_asset(base_symbol):
     """Choose appropriate exchange based on the asset"""
     if base_symbol in ["BTC", "ETH", "SOL"]:
         return ccxt.coinbase()
+    elif base_symbol == "BANANA":
+        # Try MEXC first, then Gate, then Bitget for BANANA
+        exchanges_to_try = ['mexc', 'gate', 'bitget']
+        for exchange_id in exchanges_to_try:
+            try:
+                exchange = getattr(ccxt, exchange_id)()
+                exchange.load_markets()
+                return exchange
+            except Exception:
+                continue
+        raise Exception("Could not connect to any exchange for BANANA")
     elif base_symbol == "TIG":
         return ccxt.xt()
     elif base_symbol == "NATIX":
@@ -85,7 +96,14 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
             symbol_pair = f"{base_symbol}/{actual_quote}"
             
             # Special handling for specific tokens
-            if base_symbol == "TIG":
+            if base_symbol == "BANANA":
+                if exchange.id == 'mexc':
+                    symbol_pair = "BANANA/USDT"
+                elif exchange.id == 'gate':
+                    symbol_pair = "BANANA_USDT"
+                elif exchange.id == 'bitget':
+                    symbol_pair = "BANANA/USDT"
+            elif base_symbol == "TIG":
                 symbol_pair = "TIG/USDT"
             elif base_symbol == "NATIX":
                 if exchange.id == 'kucoin':
