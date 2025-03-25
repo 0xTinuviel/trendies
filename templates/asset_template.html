@@ -1,0 +1,64 @@
+<div class="asset">
+    <h2>{{ item.asset }}
+        {% if item.chain %}
+        <span class="chain-info">(on {{ item.chain }})</span>
+        {% endif %}
+    </h2>
+    <div class="analyses">
+        <!-- USDT Analysis -->
+        <div class="analysis">
+            <h3>{{ item.asset }}/USDT Analysis</h3>
+            {% if item.usdt.get('error') %}
+                <p>Error: {{ item.usdt.error }}</p>
+            {% else %}
+                <p><small>Data from: {{ item.usdt.exchange }}</small></p>
+                <p>Current Price: ${{ "%.8f"|format(item.usdt.current_price) }}</p>
+                <p>8 EMA: ${{ "%.8f"|format(item.usdt.ema8) }}</p>
+                <p>20 EMA: ${{ "%.8f"|format(item.usdt.ema20) }}</p>
+                <p>USD Trend: <span class="{{ 'uptrend' if item.usdt.is_uptrend else 'downtrend' }}">
+                    {{ item.usdt.trend_text }}
+                </span></p>
+                
+                <!-- Performance section -->
+                <div class="performance">
+                    <p>Performance:</p>
+                    {% if item.usdt.perf_7d is not none %}
+                        <p>7D: <span class="{{ 'positive' if item.usdt.perf_7d >= 0 else 'negative' }}">
+                            {{ "%.2f"|format(item.usdt.perf_7d) }}%
+                        </span></p>
+                    {% else %}
+                        <p>7D: <span>N/A</span></p>
+                    {% endif %}
+                    
+                    {% if item.usdt.perf_14d is not none %}
+                        <p>14D: <span class="{{ 'positive' if item.usdt.perf_14d >= 0 else 'negative' }}">
+                            {{ "%.2f"|format(item.usdt.perf_14d) }}%
+                        </span></p>
+                    {% else %}
+                        <p>14D: <span>N/A</span></p>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- BTC Analysis -->
+        <div class="analysis">
+            <h3>{{ item.asset }}/BTC Analysis</h3>
+            {% if item.btc.get('error') %}
+                <p>Error: {{ item.btc.error }}</p>
+            {% else %}
+                <p><small>Data from: {{ item.btc.exchange }}
+                {% if item.btc.is_calculated %}
+                    (calculated from USDT pairs)
+                {% endif %}
+                </small></p>
+                <p>Current Ratio: {{ "%.8f"|format(item.btc.current_price) }} BTC</p>
+                <p>8 EMA: {{ "%.8f"|format(item.btc.ema8) }} BTC</p>
+                <p>20 EMA: {{ "%.8f"|format(item.btc.ema20) }} BTC</p>
+                <p>BTC Trend: <span class="{{ 'uptrend' if item.btc.is_uptrend else 'downtrend' }}">
+                    {{ "Outperforming BTC" if item.btc.is_uptrend else "Underperforming BTC" }}
+                </span></p>
+            {% endif %}
+        </div>
+    </div>
+</div> 

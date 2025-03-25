@@ -33,9 +33,11 @@ def get_btc_price():
     
     return get_cached_data('btc_price', fetch)
 
-def get_exchange_for_asset(base_symbol):
+def get_exchange_for_asset(base_symbol, preferred_exchange=None):
     """Choose appropriate exchange based on the asset"""
-    if base_symbol in ["BTC", "ETH", "SOL"]:
+    if preferred_exchange:
+        return getattr(ccxt, preferred_exchange)()
+    elif base_symbol in ["BTC", "ETH", "SOL"]:
         return ccxt.coinbase()
     elif base_symbol == "BANANA":
         # Try MEXC first, then Gate, then Bitget for BANANA
@@ -86,12 +88,12 @@ def calculate_performance(closes, days):
         pass
     return None
 
-def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
+def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None, preferred_exchange=None):
     cache_key = f"{base_symbol}_{quote_symbol}"
     
     def fetch_analysis():
         try:
-            exchange = get_exchange_for_asset(base_symbol)
+            exchange = get_exchange_for_asset(base_symbol, preferred_exchange)
         except Exception as e:
             return {
                 "symbol": f"{base_symbol}/{quote_symbol}",
@@ -200,7 +202,8 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    assets = [
+    # Portfolio assets
+    portfolio_assets = [
         {"symbol": "BTC", "chain": None},
         {"symbol": "ETH", "chain": None},
         {"symbol": "SOL", "chain": None},
@@ -210,27 +213,62 @@ async def root(request: Request):
         {"symbol": "FAI", "chain": "base"}
     ]
     
-    analysis = []
-    for asset in assets:
+    # Watch list assets with specified exchanges
+    watchlist_assets = [
+        {"symbol": "AAVE", "chain": None, "preferred_exchange": "coinbase"},
+        {"symbol": "BNB", "chain": None, "preferred_exchange": "mexc"},
+        {"symbol": "TAO", "chain": None, "preferred_exchange": "coinbase"},
+        {"symbol": "JUP", "chain": None, "preferred_exchange": "mexc"}
+    ]
+    
+    # Process portfolio assets
+    portfolio_analysis = []
+    for asset in portfolio_assets:
         if asset["symbol"] == "BTC":
-            usd_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
-            analysis.append({
+            usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+            portfolio_analysis.append({
                 "asset": asset["symbol"],
                 "chain": asset["chain"],
-                "usdt": usd_analysis,  # Keep the key as 'usdt' for template compatibility
+                "usdt": usdt_analysis,
                 "btc": {"symbol": "BTC/BTC", "error": "Same asset"}
             })
         else:
-            usd_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+            usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
             btc_analysis = get_trend_analysis(asset["symbol"], "BTC", asset["chain"])
-            analysis.append({
+            portfolio_analysis.append({
                 "asset": asset["symbol"],
                 "chain": asset["chain"],
-                "usdt": usd_analysis,  # Keep the key as 'usdt' for template compatibility
+                "usdt": usdt_analysis,
                 "btc": btc_analysis
             })
+
+    # Process watchlist assets
+    watchlist_analysis = []
+    for asset in watchlist_assets:
+        usdt_analysis = get_trend_analysis(
+            asset["symbol"], 
+            "USD", 
+            asset["chain"], 
+            preferred_exchange=asset.get("preferred_exchange")
+        )
+        btc_analysis = get_trend_analysis(
+            asset["symbol"], 
+            "BTC", 
+            asset["chain"],
+            preferred_exchange=asset.get("preferred_exchange")
+        )
+        watchlist_analysis.append({
+            "asset": asset["symbol"],
+            "chain": asset["chain"],
+            "usdt": usdt_analysis,
+            "btc": btc_analysis
+        })
     
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "analysis": analysis}
+        {
+            "request": request, 
+            "portfolio_analysis": portfolio_analysis,
+            "watchlist_analysis": watchlist_analysis
+        }
     ) 
