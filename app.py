@@ -95,7 +95,7 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
                 
             symbol_pair = f"{base_symbol}/{actual_quote}"
             
-            # Special handling for specific tokens
+            # Special handling for specific tokens and their symbol formats
             if base_symbol == "BANANA":
                 if exchange.id == 'mexc':
                     symbol_pair = "BANANA/USDT"
@@ -116,9 +116,10 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
                 elif exchange.id == 'bingx':
                     symbol_pair = "FAI/USDT"
             
-            if quote_symbol == "BTC" and base_symbol in ["NATIX", "TIG", "FAI"]:
-                usdt_ohlcv = exchange.fetch_ohlcv(symbol_pair, '1d', limit=50)
-                if not usdt_ohlcv:
+            if quote_symbol == "BTC":
+                # Get token's USD/USDT price
+                token_ohlcv = exchange.fetch_ohlcv(symbol_pair, '1d', limit=50)
+                if not token_ohlcv:
                     return {
                         "symbol": symbol_pair,
                         "error": "No price data available",
@@ -126,14 +127,21 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
                         "exchange": exchange.id
                     }
                 
-                btc_prices = get_btc_price()
+                # Get BTC's USD price from Coinbase
+                btc_exchange = ccxt.coinbase()
+                btc_ohlcv = btc_exchange.fetch_ohlcv('BTC/USD', '1d', limit=50)
                 
+                # Calculate BTC ratio
                 closes = []
-                for i in range(min(len(usdt_ohlcv), len(btc_prices))):
-                    token_price = usdt_ohlcv[i][4]
-                    btc_usd_price = btc_prices[i]
-                    closes.append(token_price / btc_usd_price)
+                for i in range(min(len(token_ohlcv), len(btc_ohlcv))):
+                    if exchange.id == 'coinbase':
+                        token_price = token_ohlcv[i][4]  # Already in USD
+                    else:
+                        token_price = token_ohlcv[i][4]  # USDT price (approximately equal to USD)
+                    btc_price = btc_ohlcv[i][4]
+                    closes.append(token_price / btc_price)
             else:
+                # Normal OHLCV fetch for USD/USDT pairs
                 ohlcv = exchange.fetch_ohlcv(symbol_pair, '1d', limit=50)
                 if not ohlcv:
                     return {
@@ -155,10 +163,10 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None):
                 "ema20": ema20,
                 "is_uptrend": ema8 > ema20,
                 "trend_text": "Uptrend" if ema8 > ema20 else "Downtrend",
-                "quote_currency": actual_quote,
+                "quote_currency": quote_symbol,
                 "chain": chain,
                 "exchange": exchange.id,
-                "is_calculated": quote_symbol == "BTC" and base_symbol in ["NATIX", "TIG", "FAI"],
+                "is_calculated": quote_symbol == "BTC",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
         except Exception as e:
