@@ -209,7 +209,7 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None, preferred_ex
     return get_cached_data(cache_key, fetch_analysis)
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+async def root(request: Request, t: str = None):  # t is our cache-busting parameter
     # Full portfolio assets list
     portfolio_assets = [
         {"symbol": "BTC", "chain": None},

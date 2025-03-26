@@ -58,11 +58,42 @@
             padding-top: 10px;
             border-top: 1px solid #eee;
         }
+        .refresh-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .refresh-button:hover {
+            background-color: #45a049;
+        }
+        .refresh-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .last-updated {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            font-size: 12px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
     <h1>Crypto Trend Analysis</h1>
     
+    <button id="refresh-button" class="refresh-button" onclick="refreshData()">
+        Refresh Data
+    </button>
+    <div id="last-updated" class="last-updated"></div>
+
     <div class="section-title">Portfolio</div>
     {% for item in portfolio_analysis %}
         {% include "asset_template.html" %}
@@ -74,5 +105,32 @@
     {% for item in watchlist_analysis %}
         {% include "asset_template.html" %}
     {% endfor %}
+
+    <script>
+        function updateLastUpdated() {
+            const element = document.getElementById('last-updated');
+            const now = new Date();
+            element.textContent = `Last updated: ${now.toLocaleString()}`;
+        }
+
+        async function refreshData() {
+            const button = document.getElementById('refresh-button');
+            button.disabled = true;
+            button.textContent = 'Refreshing...';
+
+            try {
+                // Reload the entire page but with a cache-busting parameter
+                const timestamp = new Date().getTime();
+                window.location.href = `/?t=${timestamp}`;
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                button.disabled = false;
+                button.textContent = 'Refresh Data';
+            }
+        }
+
+        // Set initial last updated time
+        updateLastUpdated();
+    </script>
 </body>
 </html> 
