@@ -7,22 +7,30 @@ import numpy as np
 from datetime import datetime, timedelta
 from cachetools import TTLCache
 import time
+import logging
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# Cache for 5 minutes
-cache = TTLCache(maxsize=100, ttl=300)
+# Separate caches for different types of data
+ohlcv_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutes for OHLCV data
+exchange_cache = TTLCache(maxsize=20, ttl=3600)  # 1 hour for exchange instances
+
+logging.basicConfig(level=logging.DEBUG)
 
 def calculate_ema(data, periods):
     return pd.Series(data).ewm(span=periods, adjust=False).mean().iloc[-1]
 
-def get_cached_data(key, fetch_func):
+def get_cached_data(key, fetch_func, cache_store=ohlcv_cache):
     """Get data from cache or fetch if not available"""
-    if key not in cache:
-        cache[key] = fetch_func()
-        time.sleep(0.1)  # Rate limiting
-    return cache[key]
+    if key not in cache_store:
+        try:
+            cache_store[key] = fetch_func()
+            time.sleep(0.5)  # Rate limiting
+        except Exception as e:
+            logging.error(f"Error fetching data for {key}: {str(e)}")
+            return {"error": str(e)}
+    return cache_store[key]
 
 def get_btc_price():
     """Get current BTC/USD price to use for conversions"""
@@ -202,7 +210,7 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None, preferred_ex
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    # Portfolio assets
+    # Full portfolio assets list
     portfolio_assets = [
         {"symbol": "BTC", "chain": None},
         {"symbol": "ETH", "chain": None},
@@ -213,7 +221,7 @@ async def root(request: Request):
         {"symbol": "FAI", "chain": "base"}
     ]
     
-    # Watch list assets with specified exchanges
+    # Full watchlist assets
     watchlist_assets = [
         {"symbol": "AAVE", "chain": None, "preferred_exchange": "coinbase"},
         {"symbol": "BNB", "chain": None, "preferred_exchange": "mexc"},
@@ -224,45 +232,65 @@ async def root(request: Request):
     # Process portfolio assets
     portfolio_analysis = []
     for asset in portfolio_assets:
-        if asset["symbol"] == "BTC":
-            usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+        try:
+            if asset["symbol"] == "BTC":
+                usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+                portfolio_analysis.append({
+                    "asset": asset["symbol"],
+                    "chain": asset["chain"],
+                    "usdt": usdt_analysis,
+                    "btc": {"symbol": "BTC/BTC", "error": "Same asset"}
+                })
+            else:
+                usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+                time.sleep(0.5)  # Rate limiting between analyses
+                btc_analysis = get_trend_analysis(asset["symbol"], "BTC", asset["chain"])
+                portfolio_analysis.append({
+                    "asset": asset["symbol"],
+                    "chain": asset["chain"],
+                    "usdt": usdt_analysis,
+                    "btc": btc_analysis
+                })
+        except Exception as e:
+            logging.error(f"Error processing portfolio asset {asset['symbol']}: {str(e)}")
             portfolio_analysis.append({
                 "asset": asset["symbol"],
                 "chain": asset["chain"],
-                "usdt": usdt_analysis,
-                "btc": {"symbol": "BTC/BTC", "error": "Same asset"}
+                "usdt": {"error": f"Failed to fetch data: {str(e)}"},
+                "btc": {"error": f"Failed to fetch data: {str(e)}"}
             })
-        else:
-            usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
-            btc_analysis = get_trend_analysis(asset["symbol"], "BTC", asset["chain"])
-            portfolio_analysis.append({
+    
+    # Process watchlist assets
+    watchlist_analysis = []
+    for asset in watchlist_assets:
+        try:
+            usdt_analysis = get_trend_analysis(
+                asset["symbol"], 
+                "USD", 
+                asset["chain"], 
+                preferred_exchange=asset.get("preferred_exchange")
+            )
+            time.sleep(0.5)  # Rate limiting between analyses
+            btc_analysis = get_trend_analysis(
+                asset["symbol"], 
+                "BTC", 
+                asset["chain"],
+                preferred_exchange=asset.get("preferred_exchange")
+            )
+            watchlist_analysis.append({
                 "asset": asset["symbol"],
                 "chain": asset["chain"],
                 "usdt": usdt_analysis,
                 "btc": btc_analysis
             })
-
-    # Process watchlist assets
-    watchlist_analysis = []
-    for asset in watchlist_assets:
-        usdt_analysis = get_trend_analysis(
-            asset["symbol"], 
-            "USD", 
-            asset["chain"], 
-            preferred_exchange=asset.get("preferred_exchange")
-        )
-        btc_analysis = get_trend_analysis(
-            asset["symbol"], 
-            "BTC", 
-            asset["chain"],
-            preferred_exchange=asset.get("preferred_exchange")
-        )
-        watchlist_analysis.append({
-            "asset": asset["symbol"],
-            "chain": asset["chain"],
-            "usdt": usdt_analysis,
-            "btc": btc_analysis
-        })
+        except Exception as e:
+            logging.error(f"Error processing watchlist asset {asset['symbol']}: {str(e)}")
+            watchlist_analysis.append({
+                "asset": asset["symbol"],
+                "chain": asset["chain"],
+                "usdt": {"error": f"Failed to fetch data: {str(e)}"},
+                "btc": {"error": f"Failed to fetch data: {str(e)}"}
+            })
     
     return templates.TemplateResponse(
         "index.html",

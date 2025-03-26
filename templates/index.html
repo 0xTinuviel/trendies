@@ -1,11 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<<<<<<< HEAD
     <title>Crypto Trend Analysis</title>
-=======
-    <title>Portfolio Trend Analysis</title>
->>>>>>> 37e2853da200c2f12062c4686cadf4cb183e9f20
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -22,8 +18,7 @@
         }
         .divider {
             margin: 40px 0;
-            border-top: 3px solid #666;
-            position: relative;
+            border-top: 2px solid #666;
         }
         .divider::after {
             content: '';
@@ -68,20 +63,15 @@
 <body>
     <h1>Crypto Trend Analysis</h1>
     
-    <!-- Portfolio Section -->
     <div class="section-title">Portfolio</div>
     {% for item in portfolio_analysis %}
-        <!-- Existing asset template -->
         {% include "asset_template.html" %}
     {% endfor %}
     
-    <!-- Divider -->
     <div class="divider"></div>
     
-    <!-- Watch List Section -->
     <div class="section-title">Watch List</div>
     {% for item in watchlist_analysis %}
-        <!-- Existing asset template -->
         {% include "asset_template.html" %}
     {% endfor %}
 </body>
