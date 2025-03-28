@@ -220,6 +220,7 @@ async def root(request: Request, refresh: str = None):
     needs_update = (
         refresh == "true" or  # Explicit refresh requested
         last_update_time is None or  # First time loading
+        "portfolio_analysis" not in ohlcv_cache or  # No cached data available
         datetime.now() - last_update_time > FORCE_UPDATE_AFTER  # Too old
     )
     
@@ -229,8 +230,8 @@ async def root(request: Request, refresh: str = None):
             "index.html",
             {
                 "request": request,
-                "portfolio_analysis": get_cached_data("portfolio_analysis", lambda: []),
-                "watchlist_analysis": get_cached_data("watchlist_analysis", lambda: []),
+                "portfolio_analysis": ohlcv_cache.get("portfolio_analysis", []),
+                "watchlist_analysis": ohlcv_cache.get("watchlist_analysis", []),
                 "last_update": last_update_time.strftime("%Y-%m-%d %H:%M:%S")
             }
         )
