@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from cachetools import TTLCache
 import time
 import logging
+from pathlib import Path
+import os
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -19,6 +21,13 @@ exchange_cache = TTLCache(maxsize=20, ttl=3600)  # 1 hour for exchange instances
 # Add at the top with other globals
 last_update_time = None
 FORCE_UPDATE_AFTER = timedelta(hours=24)  # Force update after 24 hours
+
+# Add these constants at the top
+STATIC_DIR = Path("static")
+STATIC_FILE = STATIC_DIR / "index.html"
+
+# Create static directory if it doesn't exist
+STATIC_DIR.mkdir(exist_ok=True)
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -212,31 +221,10 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None, preferred_ex
     
     return get_cached_data(cache_key, fetch_analysis)
 
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request, refresh: str = None):
-    global last_update_time
-    
-    # Check if this is a forced refresh or if we need initial data
-    needs_update = (
-        refresh == "true" or  # Explicit refresh requested
-        last_update_time is None or  # First time loading
-        "portfolio_analysis" not in ohlcv_cache or  # No cached data available
-        datetime.now() - last_update_time > FORCE_UPDATE_AFTER  # Too old
-    )
-    
-    if not needs_update:
-        # Return cached data without fetching
-        return templates.TemplateResponse(
-            "index.html",
-            {
-                "request": request,
-                "portfolio_analysis": ohlcv_cache.get("portfolio_analysis", []),
-                "watchlist_analysis": ohlcv_cache.get("watchlist_analysis", []),
-                "last_update": last_update_time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-        )
-
-    # Full portfolio assets list
+@app.get("/update", response_class=HTMLResponse)
+async def update_data(request: Request):
+    """Endpoint to update the static file - will be called by cron"""
+    # Your existing data fetching code here
     portfolio_assets = [
         {"symbol": "BTC", "chain": None},
         {"symbol": "ETH", "chain": None},
@@ -318,19 +306,27 @@ async def root(request: Request, refresh: str = None):
                 "btc": {"error": f"Failed to fetch data: {str(e)}"}
             })
     
-    # After fetching all data, update the last update time
-    last_update_time = datetime.now()
-    
-    # Cache the full analysis results
-    ohlcv_cache["portfolio_analysis"] = portfolio_analysis
-    ohlcv_cache["watchlist_analysis"] = watchlist_analysis
-    
-    return templates.TemplateResponse(
+    # Generate the HTML
+    html_content = templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "portfolio_analysis": portfolio_analysis,
             "watchlist_analysis": watchlist_analysis,
-            "last_update": last_update_time.strftime("%Y-%m-%d %H:%M:%S")
+            "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
-    ) 
+    )
+    
+    # Save the rendered HTML to a static file
+    STATIC_FILE.write_text(html_content.body.decode())
+    
+    return {"status": "success", "timestamp": datetime.now().isoformat()}
+
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    """Serve the static file"""
+    if not STATIC_FILE.exists():
+        # If static file doesn't exist, generate it
+        await update_data(request)
+    
+    return HTMLResponse(STATIC_FILE.read_text()) 
