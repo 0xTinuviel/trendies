@@ -16,6 +16,10 @@ templates = Jinja2Templates(directory="templates")
 ohlcv_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutes for OHLCV data
 exchange_cache = TTLCache(maxsize=20, ttl=3600)  # 1 hour for exchange instances
 
+# Add at the top with other globals
+last_update_time = None
+FORCE_UPDATE_AFTER = timedelta(hours=24)  # Force update after 24 hours
+
 logging.basicConfig(level=logging.DEBUG)
 
 def calculate_ema(data, periods):
@@ -209,7 +213,28 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None, preferred_ex
     return get_cached_data(cache_key, fetch_analysis)
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request, t: str = None):  # t is our cache-busting parameter
+async def root(request: Request, refresh: str = None):
+    global last_update_time
+    
+    # Check if this is a forced refresh or if we need initial data
+    needs_update = (
+        refresh == "true" or  # Explicit refresh requested
+        last_update_time is None or  # First time loading
+        datetime.now() - last_update_time > FORCE_UPDATE_AFTER  # Too old
+    )
+    
+    if not needs_update:
+        # Return cached data without fetching
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "portfolio_analysis": get_cached_data("portfolio_analysis", lambda: []),
+                "watchlist_analysis": get_cached_data("watchlist_analysis", lambda: []),
+                "last_update": last_update_time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+        )
+
     # Full portfolio assets list
     portfolio_assets = [
         {"symbol": "BTC", "chain": None},
@@ -292,11 +317,19 @@ async def root(request: Request, t: str = None):  # t is our cache-busting param
                 "btc": {"error": f"Failed to fetch data: {str(e)}"}
             })
     
+    # After fetching all data, update the last update time
+    last_update_time = datetime.now()
+    
+    # Cache the full analysis results
+    ohlcv_cache["portfolio_analysis"] = portfolio_analysis
+    ohlcv_cache["watchlist_analysis"] = watchlist_analysis
+    
     return templates.TemplateResponse(
         "index.html",
         {
-            "request": request, 
+            "request": request,
             "portfolio_analysis": portfolio_analysis,
-            "watchlist_analysis": watchlist_analysis
+            "watchlist_analysis": watchlist_analysis,
+            "last_update": last_update_time.strftime("%Y-%m-%d %H:%M:%S")
         }
     ) 

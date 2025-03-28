@@ -107,21 +107,13 @@
     {% endfor %}
 
     <script>
-        function updateLastUpdated() {
-            const element = document.getElementById('last-updated');
-            const now = new Date();
-            element.textContent = `Last updated: ${now.toLocaleString()}`;
-        }
-
         async function refreshData() {
             const button = document.getElementById('refresh-button');
             button.disabled = true;
             button.textContent = 'Refreshing...';
 
             try {
-                // Reload the entire page but with a cache-busting parameter
-                const timestamp = new Date().getTime();
-                window.location.href = `/?t=${timestamp}`;
+                window.location.href = '/?refresh=true';
             } catch (error) {
                 console.error('Error refreshing data:', error);
                 button.disabled = false;
@@ -129,8 +121,10 @@
             }
         }
 
-        // Set initial last updated time
-        updateLastUpdated();
+        // Display last update time if available
+        {% if last_update %}
+            document.getElementById('last-updated').textContent = 'Last updated: {{ last_update }}';
+        {% endif %}
     </script>
 </body>
 </html> 
