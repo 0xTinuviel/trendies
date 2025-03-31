@@ -113,9 +113,18 @@
             button.textContent = 'Refreshing...';
 
             try {
-                window.location.href = '/?refresh=true';
+                // First call the update endpoint
+                const response = await fetch('/update');
+                if (!response.ok) {
+                    throw new Error('Update failed');
+                }
+                
+                // Then reload the page to show new data
+                window.location.reload();
             } catch (error) {
                 console.error('Error refreshing data:', error);
+                alert('Failed to refresh data: ' + error.message);
+            } finally {
                 button.disabled = false;
                 button.textContent = 'Refresh Data';
             }

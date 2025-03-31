@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 import ccxt
@@ -221,106 +221,113 @@ def get_trend_analysis(base_symbol, quote_symbol="USD", chain=None, preferred_ex
     
     return get_cached_data(cache_key, fetch_analysis)
 
-@app.get("/update", response_class=HTMLResponse)
+@app.get("/update")
 async def update_data(request: Request):
-    """Endpoint to update the static file - will be called by cron"""
-    # Your existing data fetching code here
-    portfolio_assets = [
-        {"symbol": "BTC", "chain": None},
-        {"symbol": "ETH", "chain": None},
-        {"symbol": "SOL", "chain": None},
-        {"symbol": "BANANA", "chain": "ethereum"},
-        {"symbol": "NATIX", "chain": "solana"},
-        {"symbol": "TIG", "chain": "base"},
-        {"symbol": "FAI", "chain": "base"}
-    ]
-    
-    # Full watchlist assets
-    watchlist_assets = [
-        {"symbol": "AAVE", "chain": None, "preferred_exchange": "coinbase"},
-        {"symbol": "BNB", "chain": None, "preferred_exchange": "mexc"},
-        {"symbol": "TAO", "chain": None, "preferred_exchange": "coinbase"},
-        {"symbol": "JUP", "chain": None, "preferred_exchange": "mexc"}
-    ]
-    
-    # Process portfolio assets
-    portfolio_analysis = []
-    for asset in portfolio_assets:
-        try:
-            if asset["symbol"] == "BTC":
-                usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+    """Endpoint to update the static file"""
+    try:
+        logging.info("Starting data update...")
+        
+        # Your existing data fetching code here
+        portfolio_assets = [
+            {"symbol": "BTC", "chain": None},
+            {"symbol": "ETH", "chain": None},
+            {"symbol": "SOL", "chain": None},
+            {"symbol": "BANANA", "chain": "ethereum"},
+            {"symbol": "NATIX", "chain": "solana"},
+            {"symbol": "TIG", "chain": "base"},
+            {"symbol": "FAI", "chain": "base"}
+        ]
+        
+        # Full watchlist assets
+        watchlist_assets = [
+            {"symbol": "AAVE", "chain": None, "preferred_exchange": "coinbase"},
+            {"symbol": "BNB", "chain": None, "preferred_exchange": "mexc"},
+            {"symbol": "TAO", "chain": None, "preferred_exchange": "coinbase"},
+            {"symbol": "JUP", "chain": None, "preferred_exchange": "mexc"}
+        ]
+        
+        # Process portfolio assets
+        portfolio_analysis = []
+        for asset in portfolio_assets:
+            try:
+                if asset["symbol"] == "BTC":
+                    usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+                    portfolio_analysis.append({
+                        "asset": asset["symbol"],
+                        "chain": asset["chain"],
+                        "usdt": usdt_analysis,
+                        "btc": {"symbol": "BTC/BTC", "error": "Same asset"}
+                    })
+                else:
+                    usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+                    time.sleep(0.5)  # Rate limiting between analyses
+                    btc_analysis = get_trend_analysis(asset["symbol"], "BTC", asset["chain"])
+                    portfolio_analysis.append({
+                        "asset": asset["symbol"],
+                        "chain": asset["chain"],
+                        "usdt": usdt_analysis,
+                        "btc": btc_analysis
+                    })
+            except Exception as e:
+                logging.error(f"Error processing portfolio asset {asset['symbol']}: {str(e)}")
                 portfolio_analysis.append({
                     "asset": asset["symbol"],
                     "chain": asset["chain"],
-                    "usdt": usdt_analysis,
-                    "btc": {"symbol": "BTC/BTC", "error": "Same asset"}
+                    "usdt": {"error": f"Failed to fetch data: {str(e)}"},
+                    "btc": {"error": f"Failed to fetch data: {str(e)}"}
                 })
-            else:
-                usdt_analysis = get_trend_analysis(asset["symbol"], "USD", asset["chain"])
+        
+        # Process watchlist assets
+        watchlist_analysis = []
+        for asset in watchlist_assets:
+            try:
+                usdt_analysis = get_trend_analysis(
+                    asset["symbol"], 
+                    "USD", 
+                    asset["chain"], 
+                    preferred_exchange=asset.get("preferred_exchange")
+                )
                 time.sleep(0.5)  # Rate limiting between analyses
-                btc_analysis = get_trend_analysis(asset["symbol"], "BTC", asset["chain"])
-                portfolio_analysis.append({
+                btc_analysis = get_trend_analysis(
+                    asset["symbol"], 
+                    "BTC", 
+                    asset["chain"],
+                    preferred_exchange=asset.get("preferred_exchange")
+                )
+                watchlist_analysis.append({
                     "asset": asset["symbol"],
                     "chain": asset["chain"],
                     "usdt": usdt_analysis,
                     "btc": btc_analysis
                 })
-        except Exception as e:
-            logging.error(f"Error processing portfolio asset {asset['symbol']}: {str(e)}")
-            portfolio_analysis.append({
-                "asset": asset["symbol"],
-                "chain": asset["chain"],
-                "usdt": {"error": f"Failed to fetch data: {str(e)}"},
-                "btc": {"error": f"Failed to fetch data: {str(e)}"}
-            })
-    
-    # Process watchlist assets
-    watchlist_analysis = []
-    for asset in watchlist_assets:
-        try:
-            usdt_analysis = get_trend_analysis(
-                asset["symbol"], 
-                "USD", 
-                asset["chain"], 
-                preferred_exchange=asset.get("preferred_exchange")
-            )
-            time.sleep(0.5)  # Rate limiting between analyses
-            btc_analysis = get_trend_analysis(
-                asset["symbol"], 
-                "BTC", 
-                asset["chain"],
-                preferred_exchange=asset.get("preferred_exchange")
-            )
-            watchlist_analysis.append({
-                "asset": asset["symbol"],
-                "chain": asset["chain"],
-                "usdt": usdt_analysis,
-                "btc": btc_analysis
-            })
-        except Exception as e:
-            logging.error(f"Error processing watchlist asset {asset['symbol']}: {str(e)}")
-            watchlist_analysis.append({
-                "asset": asset["symbol"],
-                "chain": asset["chain"],
-                "usdt": {"error": f"Failed to fetch data: {str(e)}"},
-                "btc": {"error": f"Failed to fetch data: {str(e)}"}
-            })
-    
-    # Generate the HTML
-    html_content = templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "portfolio_analysis": portfolio_analysis,
-            "watchlist_analysis": watchlist_analysis,
-            "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-    )
-    
-    # Save the rendered HTML to a static file
-    STATIC_FILE.write_text(html_content.body.decode())
-    
-    return {"status": "success", "timestamp": datetime.now().isoformat()}
+            except Exception as e:
+                logging.error(f"Error processing watchlist asset {asset['symbol']}: {str(e)}")
+                watchlist_analysis.append({
+                    "asset": asset["symbol"],
+                    "chain": asset["chain"],
+                    "usdt": {"error": f"Failed to fetch data: {str(e)}"},
+                    "btc": {"error": f"Failed to fetch data: {str(e)}"}
+                })
+        
+        # Generate the HTML
+        html_content = templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "portfolio_analysis": portfolio_analysis,
+                "watchlist_analysis": watchlist_analysis,
+                "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+        )
+        
+        # Save the rendered HTML to a static file
+        STATIC_FILE.write_text(html_content.body.decode())
+        logging.info("Data update completed successfully")
+        
+        return {"status": "success", "timestamp": datetime.now().isoformat()}
+    except Exception as e:
+        logging.error(f"Error updating data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
