@@ -226,6 +226,9 @@ async def update_data(request: Request):
     """Endpoint to update the static file"""
     try:
         logging.info("Starting data update...")
+        # Clear the caches
+        ohlcv_cache.clear()
+        exchange_cache.clear()
         
         # Your existing data fetching code here
         portfolio_assets = [
