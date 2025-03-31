@@ -336,4 +336,5 @@ async def root(request: Request):
         # If static file doesn't exist, generate it
         await update_data(request)
     
+    # Always serve the static file
     return HTMLResponse(STATIC_FILE.read_text()) 

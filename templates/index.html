@@ -119,12 +119,11 @@
                     throw new Error('Update failed');
                 }
                 
-                // Then reload the page to show new data
-                window.location.reload();
+                // After successful update, do a hard reload without cache
+                window.location.href = '/?t=' + new Date().getTime();
             } catch (error) {
                 console.error('Error refreshing data:', error);
                 alert('Failed to refresh data: ' + error.message);
-            } finally {
                 button.disabled = false;
                 button.textContent = 'Refresh Data';
             }
