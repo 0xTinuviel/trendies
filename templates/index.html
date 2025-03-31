@@ -113,27 +113,21 @@
             button.textContent = 'Refreshing...';
 
             try {
-                console.log('Starting refresh...');
-                // Clear any existing cache
-                await fetch('/update', {
+                // Force update
+                const updateResponse = await fetch('/update', {
                     method: 'GET',
-                    cache: 'no-cache',
-                    headers: {
-                        'Cache-Control': 'no-cache, no-store, must-revalidate',
-                        'Pragma': 'no-cache',
-                        'Expires': '0'
-                    }
-                }).then(response => {
-                    if (!response.ok) {
-                        throw new Error('Update failed: ' + response.statusText);
-                    }
-                    console.log('Update successful, reloading page...');
-                    // Force a complete page reload, bypassing the cache
-                    document.location.reload(true);
+                    cache: 'no-store'
                 });
+
+                if (!updateResponse.ok) {
+                    throw new Error(`Update failed: ${updateResponse.status}`);
+                }
+
+                // Now force reload the page with cache bypass
+                window.location.href = `/?refresh=true&t=${Date.now()}`;
             } catch (error) {
-                console.error('Error during refresh:', error);
-                alert('Failed to refresh data: ' + error.message);
+                console.error('Error:', error);
+                alert('Failed to refresh: ' + error.message);
                 button.disabled = false;
                 button.textContent = 'Refresh Data';
             }

@@ -229,6 +229,7 @@ async def update_data(request: Request):
         # Clear the caches
         ohlcv_cache.clear()
         exchange_cache.clear()
+        logging.info("Caches cleared")
         
         # Your existing data fetching code here
         portfolio_assets = [
@@ -323,7 +324,7 @@ async def update_data(request: Request):
             }
         )
         
-        # Save the rendered HTML to a static file
+        logging.info(f"Writing new content to {STATIC_FILE}")
         STATIC_FILE.write_text(html_content.body.decode())
         logging.info("Data update completed successfully")
         
@@ -335,9 +336,21 @@ async def update_data(request: Request):
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the static file"""
-    if not STATIC_FILE.exists():
-        # If static file doesn't exist, generate it
+    # Get the refresh parameter
+    refresh = request.query_params.get('refresh', '').lower() == 'true'
+    
+    if refresh or not STATIC_FILE.exists():
+        logging.info("Generating new data...")
         await update_data(request)
     
-    # Always serve the static file
-    return HTMLResponse(STATIC_FILE.read_text()) 
+    # Add cache control headers to prevent browser caching
+    headers = {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    }
+    
+    return HTMLResponse(
+        content=STATIC_FILE.read_text(),
+        headers=headers
+    ) 
